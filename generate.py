@@ -4,59 +4,63 @@
 #     "potodo",
 #     "jinja2",
 # ]
+#
+# [tool.uv.sources]
+# potodo = { git = "https://git.afpy.org/maciek/potodo", branch = "pot" }
 # ///
 from datetime import datetime, timezone
 from pathlib import Path
-from shutil import rmtree
+from subprocess import run
 from tempfile import TemporaryDirectory
 from git import Repo, GitCommandError
-from potodo.potodo import scan_path
+from potodo.potodo import merge_and_scan_path
 from jinja2 import Template
 
 completion_progress = []
 generation_time = datetime.now(timezone.utc)
 
-with TemporaryDirectory() as tmpdir:
+with TemporaryDirectory() as clones_dir:
+    Repo.clone_from(f'https://github.com/python/cpython.git', Path(clones_dir, 'cpython'), depth=1, branch='3.13')
+    run(['make', '-C', Path(clones_dir, 'cpython/Doc'), 'venv'], check=True)
+    run(['make', '-C', Path(clones_dir, 'cpython/Doc'), 'gettext'], check=True)
     for language in ('es', 'fr', 'id', 'it', 'ja', 'ko', 'pl', 'pt-br', 'tr', 'uk', 'zh-cn', 'zh-tw'):
-        clone_path = Path(tmpdir, language)
+        clone_path = Path(clones_dir, language)
         for branch in ('3.13', '3.12', '3.11', '3.10', '3.9'):
             try:
-                Repo.clone_from(f'https://github.com/python/python-docs-{language}.git', clone_path, depth=1, branch=branch)
+                Repo.clone_from(
+                    f'https://github.com/python/python-docs-{language}.git', clone_path, depth=1, branch=branch
+                )
             except GitCommandError:
                 print(f'failed to clone {language} {branch}')
                 continue
-            try:
-                completion = scan_path(clone_path, no_cache=True, hide_reserved=False, api_url='').completion
-            except OSError:
-                print(f'failed to scan {language} {branch}')
-                rmtree(clone_path)
-                continue
             else:
                 break
-        completion_progress.append((language, completion, branch))
+        with TemporaryDirectory() as tmpdir:
+            completion = merge_and_scan_path(
+                clone_path, pot_path=Path(clones_dir, 'cpython/Doc/build/gettext'), hide_reserved=False, api_url='', merge_path=Path(tmpdir)
+            ).completion
+        completion_progress.append((language, completion))
         print(completion_progress[-1])
 
-template = Template("""
-<html lang="en">
+template = Template("""<html lang="en">
 <head>
-<title>Python Docs Translation Dashboard</title>
-<link rel="stylesheet" href="style.css">
+  <title>Python Docs Translation Dashboard</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <h1>Python Docs Translation Dashboard</h1>
 <table>
 <thead>
-<tr><th>language</th><th>branch</th><th>completion</th></tr>
+<tr><th>language</th><th>completion</th></tr>
 </thead>
 <tbody>
-{% for language, completion, branch in completion_progress | sort(attribute=1) | reverse %}
+{% for language, completion in completion_progress | sort(attribute=1) | reverse %}
 <tr>
   <td data-label="language">
     <a href="https://github.com/python/python-docs-{{ language }}" target="_blank">
       {{ language }}
     </a>
   </td>
-  <td data-label="branch">{{ branch }}</td>
   <td data-label="completion">
     <div class="progress-bar" style="width: {{ completion | round(2) }}%;">{{ completion | round(2) }}%</div>
   </td>
@@ -67,8 +71,7 @@ template = Template("""
 <p>Last updated at {{ generation_time.strftime('%A, %d %B %Y, %X %Z') }}.</p>
 <p>Note that the completion value is based on files available in language Git repository and <a href="https://github.com/m-aciek/pydocs-translation-dashboard/issues/2" target="_blank">may not include</a> e.g. resources which translation hasn't yet started.</p>
 </body>
-</html>
-""")
+</html>""")
 
 output = template.render(completion_progress=completion_progress, generation_time=generation_time)
 
