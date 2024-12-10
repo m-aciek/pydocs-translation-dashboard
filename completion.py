@@ -6,15 +6,16 @@ import git
 from potodo import potodo
 
 
-def get_completion(clones_dir: str, language: str) -> float:
-    clone_path = Path(clones_dir, language)
-    for branch in ('3.13', '3.12', '3.11', '3.10', '3.9'):
+def get_completion(clones_dir: str, repo: str) -> float:
+    clone_path = Path(clones_dir, repo)
+    completion = 0.
+    for branch in ('3.13', '3.12', '3.11', '3.10', '3.9', '3.8', '3.7', '3.6', 'master'):
         try:
             git.Repo.clone_from(
-                f'https://github.com/python/python-docs-{language}.git', clone_path, depth=1, branch=branch
+                f'https://github.com/{repo}.git', clone_path, depth=1, branch=branch
             )
         except git.GitCommandError:
-            print(f'failed to clone {language} {branch}')
+            print(f'failed to clone {repo} {branch}')
             continue
         else:
             break
