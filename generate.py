@@ -20,7 +20,7 @@ completion_progress = []
 generation_time = datetime.now(timezone.utc)
 
 with TemporaryDirectory() as tmpdir:
-    for language, repo in source.get_languages_and_repos():
+    for language, repo in repositories.get_languages_and_repos():
         if repo:
             completion_number, branch = completion.get_completion_and_branch(tmpdir, repo)
             visitors_number = visitors.get_number_of_visitors(language)
