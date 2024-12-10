@@ -4,6 +4,7 @@
 #     "potodo",
 #     "jinja2",
 #     "requests",
+#     "docutils",
 # ]
 # ///
 from datetime import datetime, timezone
@@ -12,16 +13,20 @@ from tempfile import TemporaryDirectory
 from jinja2 import Template
 
 import completion
+import repositories
 import visitors
 
 completion_progress = []
 generation_time = datetime.now(timezone.utc)
 
 with TemporaryDirectory() as tmpdir:
-    for language in ('es', 'fr', 'id', 'it', 'ja', 'ko', 'pl', 'pt-br', 'tr', 'uk', 'zh-cn', 'zh-tw'):
-        completion_number, branch = completion.get_completion_and_branch(tmpdir, language)
-        visitors_number = visitors.get_number_of_visitors(language)
-        completion_progress.append((language, completion_number, branch, visitors_number))
+    for language, repo in repositories.get_languages_and_repos():
+        if repo:
+            completion_number, branch = completion.get_completion_and_branch(tmpdir, repo)
+            visitors_number = visitors.get_number_of_visitors(language)
+        else:
+            completion_number, branch, visitors_number = 0., "", 0
+        completion_progress.append((language, repo, completion_number, branch, visitors_number))
         print(completion_progress[-1])
 
 template = Template("""
@@ -42,10 +47,11 @@ template = Template("""
 </tr>
 </thead>
 <tbody>
-{% for language, completion, branch, visitors in completion_progress | sort(attribute=1) | reverse %}
+{% for language, repo, completion, branch, visitors in completion_progress | sort(attribute=2) | reverse %}
 <tr>
+  {% if repo %}
   <td data-label="language">
-    <a href="https://github.com/python/python-docs-{{ language }}" target="_blank">
+    <a href="https://github.com/{{ repo }}" target="_blank">
       {{ language }}
     </a>
   </td>
@@ -54,6 +60,10 @@ template = Template("""
       {{ '{:,}'.format(visitors) }}
     </a>
   </td>
+  {% else %}
+  <td data-label="language">{{ language }}</td>
+  <td data-label="visitors">0</td>
+  {% endif %}
   <td data-label="branch">{{ branch }}</td>
   <td data-label="completion">
     <div class="progress-bar" style="width: {{ completion | round(2) }}%;">{{ completion | round(2) }}%</div>
